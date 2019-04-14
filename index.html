@@ -1,0 +1,238 @@
+<html>
+
+<head>
+    <style>
+        * {
+            font-family: monospace;
+        }
+
+        #output {
+            padding: 1em;
+            font-size: 16pt;
+            width: 100%;
+            text-align: center;
+        }
+        [title]{
+            cursor:help;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Password Generator</h1>
+    <center>
+        <button id="genBtn" autofocus>GeneratePassword</button>
+        <input type="checkbox" data-bind="continuous">
+        <p>
+            <textarea id="output" data-bind="pass">Loading...</textarea>
+            <div>
+                <span>Bruteforce entropy: <b title="Bruteforce entropy is based on the length of the password if you would bruteforce it using all ASCII printable characters." onclick="alert(this.title)">
+                        <span data-bind="blindEntropy"></span>bits</b>
+                </span>
+                <span>Diversity entropy: <b title="Diversity entropy is based on the length of the password if you would bruteforce it using only the characters present on the password." onclick="alert(this.title)">
+                        <span data-bind="minEntropy"></span>bits</b>
+                </span>
+            </div>
+            <div> <b><span data-bind="length"></span> characters</b> </div>
+        </p>
+    </center>
+    <div>
+        Params <button id="randomize">randomize</button>
+        <table>
+            <tr>
+                <th>Words</th>
+                <td><input data-bind="words" type="range"  min="0" max="10"/> <input data-bind="words" type="tel" size="2"> </td>
+                <td><input data-bind="randomCase" type="checkbox"> ALLOW CAPS</td>
+            </tr>
+            <tr>
+                <th>Digits</th>
+                <td><input data-bind="digits" type="range"  min="0" max="16"/> <input data-bind="digits" type="tel" size="2"> </td>
+            </tr>
+            <tr>
+                <th>Separator</th>
+                <td><input data-bind="separators" type="range"  min="0" max="6"/> <input data-bind="separators" type="tel" size="2"> </td>
+            </tr>
+            <tr>
+                <th>Symbols</th>
+                <td><input data-bind="symbols" type="text" /></td>
+            </tr>
+        </table>
+
+        <div>
+            Source Entropy: <b title="This number represents the maximum number of passwords that can be generated" onclick="alert(this.title)">
+                <span data-bind="entropy"></span>bits
+            </b>
+        </div>
+    </div>
+
+    <script src="words.js"></script>
+
+    <script>
+        window.onload = function () {
+
+            randomize.onclick = function randomizeParams() {
+                data.words = randomInt(1, 10);
+                data.digits = randomInt(0, 16);
+                data.separators = randomInt(0, 6);
+                data.randomCase = randomInt(0, 1);
+                genPass();
+            };
+
+            window.requestAnimationFrame(function f() {
+                if (data.continuous) genPass();
+                requestAnimationFrame(f);
+            });
+
+            genBtn.onclick = genPass;
+            genPass();
+        };
+
+        function genPass() {
+            const pw = generatePassword();
+
+            data.pass = pw;
+            data.length = pw.length;
+
+            //calc entropy
+            data.blindEntropy = Math.floor(Math.log2(Math.pow(95, pw.length)));
+            let eWords = Math.pow(data.randomCase ? dictWords.length * 2 : dictWords.length, data.words);
+            let eSeparators = Math.pow(data.symbols.split('').length, data.separators);
+            let eDigits = Math.pow(10, data.digits);
+            data.entropy = Math.floor(Math.log2(eWords * eSeparators * eDigits));
+            const unique = new Set(pw.split('')).size;
+            data.minEntropy = Math.floor(Math.log2(Math.pow(unique, pw.length)));
+        };
+
+        const data = dd({
+            words: 4,
+            digits: 4,
+            separators: 2,
+            randomCase: true,
+            symbols: `-/:;()$&@,.?!`,
+        }, genPass);
+
+
+
+        function randomInt_(min, max) {
+            return Math.floor(min + Math.random() * (max + 1 - min));
+        }
+
+        function randomInt(min, max) {
+            const randomBuffer = new Uint32Array(1);
+            window.crypto.getRandomValues(randomBuffer);
+            const randomNumber = randomBuffer[0] / (0xffffffff + 1);
+            min = Math.ceil(min);
+            max = Math.floor(max);
+            return Math.floor(randomNumber * (max - min + 1)) + min;
+        }
+
+
+        function generatePassword() {
+            let pass = '';
+            let parts = [];
+
+            // choose a separator, it may repeat
+            let s = '';
+            for (let i = 0; i < data.separators; i++) {
+                s += data.symbols.split('')[randomInt(0, data.symbols.split('').length - 1)];
+            }
+
+            for (let i = 0; i < data.words; i++) {
+
+                // pick a random word
+                let w = dictWords[randomInt(0, dictWords.length - 1)];
+
+                // capitalize it or not
+                if (data.randomCase) {
+                    switch (randomInt(1, 2)) {
+                        case 1:
+                            w = w.toLowerCase();
+                            break;
+                        case 2:
+                            w = w.toUpperCase();
+                            break;
+                        case 3:
+                            w = w.charAt(0).toUpperCase() + w.slice(1);
+                            break;
+                    }
+                }
+                parts.push(w);
+            }
+
+            // add numbers to the end
+            let num = '';
+            for (let i = 0; i < data.digits; i++) {
+                num += randomInt(0, 9);
+            }
+            parts.push(num);
+
+            return parts.join(s);
+        }
+
+
+
+
+        function dd(context = {}, watcher = () => {}) {
+            const D = 'data-bind';
+            const values = {};
+            const boundElms = {};
+            const elms = Array.from(document.querySelectorAll(`[${D}]`));
+            elms.forEach(el => {
+                const prop = el.getAttribute(D);
+                if (!boundElms[prop]) boundElms[prop] = [];
+                boundElms[prop].push(el);
+                if ('value' in el) {
+                    el.addEventListener('input', () => {
+                        values[prop] = getDOMValue(el);
+                        updateDOM(prop);
+                        watcher(prop, values[prop]);
+                    });
+                }
+            });
+            Object.keys(boundElms).forEach(prop => {
+                values[prop] = context[prop]; //initial value
+                Object.defineProperty(context, prop, {
+                    get() {
+                        return values[prop];
+                    },
+                    set(newValue) {
+                        values[prop] = newValue;
+                        updateDOM(prop, newValue);
+                    },
+                    enumerable: true,
+                    configurable: true,
+                });
+                updateDOM(prop, values[prop]); //first update
+            });
+
+            function updateDOM(prop) {
+                const value = values[prop];
+                boundElms[prop].forEach(el => {
+                    if (el.type === 'checkbox') {
+                        el.checked = value;
+                    } else if ('value' in el) {
+                        el.value = value;
+                    } else {
+                        el.textContent = value;
+                    }
+                });
+            }
+
+            function getDOMValue(el) {
+                let value;
+                if (el.type === 'checkbox') {
+                    value = el.checked;
+                } else if ('value' in el) {
+                    value = el.value;
+                } else {
+                    value = el.textContent;
+                }
+                return value;
+            }
+            return context;
+        }
+    </script>
+
+</body>
+
+</html>
