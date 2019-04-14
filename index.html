@@ -18,7 +18,7 @@
       box-sizing: border-box;
     }
 
-    #genBtn,
+    #generateBtn,
     #copyBtn {
       font-size: 18pt;
       width: 40vw;
@@ -26,23 +26,8 @@
     }
 
     #output {
-      font-size: 20pt;
       /* font-size: 5vmin; */
-
-      padding: 2.5em 0em;
-      margin: 10px 0px;
-      text-align: center;
-
-      width: 100%;
-      max-width: 100%;
-
-      word-wrap: break-word;
-      overflow-wrap: break-word;
-
-      /* color:#fff;
-            background: #202020; */
-      background: ThreeDFace;
-
+      font-size: 20pt;
       font-family:
         SFMono-Regular,
         Menlo,
@@ -51,6 +36,17 @@
         "Liberation Mono",
         "Courier New",
         monospace;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      text-align: center;
+        
+      background: ThreeDFace;      
+
+      padding: 2.5em 0;
+      margin: 10px 0;
+
+      width: 100%;
+      max-width: 100%;
     }
 
     .details>span {
@@ -72,15 +68,12 @@
       max-width: 50vw;
     }
 
-
     input+label+.toggle {
       display: none;
     }
-
     input:checked+label+.toggle {
       display: block;
     }
-
     .toggle {
       margin: 1em;
     }
@@ -88,10 +81,272 @@
     footer {
       font-size: small;
       text-align: center;
-
       margin-top: 2em;
     }
   </style>
+  
+  <script>
+    /**
+     * @function generatePassword
+     * @param  {object} params  {description}
+     * @param  {array} params.dictWords  A dictionary of words
+     * @param  {string} [params.symbols='-/:;()$&@,.?!']    Symbols used for separators
+     * @param  {number} [params.words=4]      Amount of words
+     * @param  {number} [params.digits=4]     Amount of numeric digits
+     * @param  {number} [params.separators=2] Length of the separators
+     * @param  {boolean} [params.randomCase=true] Allow words to be UPPERCASE
+     * @return {string} A generated password
+     * @author Victor github.com/victornpb
+     */
+    function generatePassword({
+      dictWords=['foo', 'bar'],
+      symbols='-/:;()$&@,.?!',
+      words=4,
+      digits=4,
+      separators=2,
+      randomCase=true,
+    }) {
+
+      function randomIntSecure(min, max) {
+        const randomBuffer = new Uint32Array(1);
+        window.crypto.getRandomValues(randomBuffer);
+        const randomNumber = randomBuffer[0] / (0xffffffff + 1);
+        min = Math.ceil(min);
+        max = Math.floor(max);
+        return Math.floor(randomNumber * (max - min + 1)) + min;
+      }
+
+      let pass = '';
+      let parts = [];
+
+      // choose a separator, it may repeat
+      let s = '';
+      for (let i = 0; i < separators; i++) {
+        s += symbols.split('')[randomIntSecure(0, symbols.split('').length - 1)];
+      }
+
+      for (let i = 0; i < words; i++) {
+
+        // pick a random word
+        let w = dictWords[randomIntSecure(0, dictWords.length - 1)];
+
+        // capitalize it or not
+        if (randomCase) {
+          switch (randomIntSecure(1, 2)) {
+            case 1:
+              w = w.toLowerCase();
+              break;
+            case 2:
+              w = w.toUpperCase();
+              break;
+            case 3:
+              w = w.charAt(0).toUpperCase() + w.slice(1);
+              break;
+          }
+        }
+        parts.push(w);
+      }
+
+      // add numbers to the end
+      let num = '';
+      for (let i = 0; i < digits; i++) {
+        num += randomIntSecure(0, 9);
+      }
+      parts.push(num);
+
+      return parts.join(s);
+    }
+  </script>
+
+  <script>
+
+    let data = {}; // state
+
+    window.onload = function () {
+
+      if(!window.DICTIONARY){
+        alert('Dictionary not loaded!');
+      }
+
+      // set up a simple reactive state
+      data = twoBind({
+        dictWords: window.DICTIONARY,
+        symbols: `-/:;()$&@,.?!`,
+        words: 4,
+        digits: 4,
+        separators: 2,
+        randomCase: true,
+        continuous: false,
+      }, ()=>{
+        // when parameters change
+        createNewPassword();
+      });
+
+      document.getElementById('generateBtn').addEventListener('click', createNewPassword);
+
+      document.getElementById('copyBtn').addEventListener('click', () => {
+        const success = copyToClipboard(output.textContent);
+        if (success) {
+          output.style.color = 'HighlightText';
+          output.style.backgroundColor = 'Highlight';
+          setTimeout(() => output.style.cssText = '', 500);
+        }
+      });
+      
+      document.getElementById('randomizeOptionsBtn').addEventListener('click', () => {
+        function randomInt(min, max) {
+          return Math.floor(min + Math.random() * (max + 1 - min));
+        }
+        data.words = randomInt(1, 10);
+        data.digits = randomInt(0, 16);
+        data.separators = randomInt(0, 6);
+        data.randomCase = randomInt(0, 1);
+        createNewPassword();
+      });
+
+      window.requestAnimationFrame(function frame() {
+        if (data.continuous) createNewPassword();
+        requestAnimationFrame(frame);
+      });
+
+      // Initial password
+      createNewPassword();
+    };
+
+    function createNewPassword() {
+
+      const generatedPassword = generatePassword({
+        dictWords: data.dictWords,
+        symbols: data.symbols,
+        words: data.words,
+        digits: data.digits,
+        separators: data.separators,
+        randomCase: data.randomCase,
+      });
+
+      // calc entropy
+      data.blindEntropy = Math.floor(Math.log2(Math.pow(95, generatedPassword.length))); // using ascii printable characters
+
+      // full knowledge entropy
+      let eWords = Math.pow(data.randomCase ? data.dictWords.length * 2 : data.dictWords.length, data.words);
+      let eSeparators = Math.pow(data.symbols.split('').length, data.separators);
+      let eDigits = Math.pow(10, data.digits);
+      data.entropy = Math.floor(Math.log2(eWords * eSeparators * eDigits));
+      
+      // bruteforce using only the characters present (not really practical but this gives you an idea of the minimun set of characters that could brute force this password)
+      const unique = new Set(generatedPassword.split('')).size;
+      data.minEntropy = Math.floor(Math.log2(Math.pow(unique, generatedPassword.length)));'';
+
+      // update display
+      data.pass = generatedPassword;
+      data.passLength = generatedPassword.length;
+    };
+
+    /**
+     * Two way data binding for a crude "reactivite system"
+     * @author Victor github.com/victornpb
+     */
+    function twoBind(context = {}, watcher = () => {}) {
+      const D = 'data-bind';
+      const values = {};
+      const boundElms = {};
+      const elms = Array.from(document.querySelectorAll(`[${D}]`));
+      elms.forEach(el => {
+        const prop = el.getAttribute(D);
+        if (!boundElms[prop]) boundElms[prop] = [];
+        boundElms[prop].push(el);
+        if ('value' in el) {
+          const changed = () => {
+            values[prop] = getDOMValue(el);
+            updateDOM(prop);
+            watcher(prop, values[prop]);
+          };
+          el.addEventListener('input', changed);
+          el.addEventListener('change', changed);
+        }
+      });
+      Object.keys(boundElms).forEach(prop => {
+        values[prop] = context[prop]; //initial value
+        Object.defineProperty(context, prop, {
+          get() {
+            return values[prop];
+          },
+          set(newValue) {
+            values[prop] = newValue;
+            updateDOM(prop, newValue);
+          },
+          enumerable: true,
+          configurable: true,
+        });
+        updateDOM(prop, values[prop]); //first update
+      });
+
+      function updateDOM(prop) {
+        const value = values[prop];
+        boundElms[prop].forEach(el => {
+          if (el.type === 'checkbox') {
+            el.checked = value;
+          } else if ('value' in el) {
+            el.value = value;
+          } else {
+            el.textContent = value;
+          }
+        });
+      }
+
+      function getDOMValue(el) {
+        let value;
+        if (el.type === 'checkbox') {
+          value = el.checked;
+        } else if ('value' in el) {
+          value = el.value;
+        } else {
+          value = el.textContent;
+        }
+        return value;
+      }
+      return context;
+    }
+
+    /**
+     * Copy to clipboard
+     * @author Victor github.com/victornpb
+     */
+    function copyToClipboard(string) {
+      let textarea;
+      let result;
+
+      try {
+        textarea = document.createElement('textarea');
+        // prevent scroll from jumping to the bottom when focus is set.
+        textarea.style.cssText = 'position:fixed; top:0px; z-index: 999;';
+        textarea.readOnly = true;
+        textarea.value = string;
+        document.body.appendChild(textarea);
+
+        // Try selecting text using setSelectionRange (Works on iOS Mobile Safari)
+        textarea.setSelectionRange(0, string.length);
+
+        const selection = window.getSelection().toString();
+        if (selection !== string) {
+          // test whats selected (setSelectionRange doesn't work on chrome for some reason)
+          // Select using old school method (this also works on iOS, but it makes the zoom jump to the selection)
+          textarea.focus();
+          textarea.select();
+        }
+
+        result = document.execCommand('copy');
+      } catch (err) {
+        console.error(err);
+        result = null;
+      } finally {
+        // setTimeout(() => { //debugging
+        document.body.removeChild(textarea);
+        // }, 1000 * 10);
+      }
+      return result;
+    }
+  </script>
 </head>
 
 <body>
@@ -130,7 +385,7 @@
       </tr>
     </table>
     <p>
-      <button id="randomize">Randomize options</button>
+      <button id="randomizeOptionsBtn">Randomize options</button>
     </p>
   </div>
 
@@ -149,242 +404,33 @@
         </span>
         <span>
           Diversity:
-          <b title="Diversity entropy is based on the length of the password if you would bruteforce it using only the characters present on the password."
+          <b title="Diversity entropy is based on the length of the password if you would bruteforce it using only the characters present on the password. This gives you the complexity for a minimum set of characters that could brute force this password."
             onclick="alert(this.title)">
             <span data-bind="minEntropy"></span>bits
           </b>
         </span>
         <span>
-          Source:
-          <b title="This number represents the maximum number of passwords that can be generated using the current options"
+          Intrinsic:
+          <b title="This number represents the maximum number of passwords that can be generated using the current options, thus representing the worst case scenario, when the attacker have full knowledged of the search space."
             onclick="alert(this.title)">
             <span data-bind="entropy"></span>bits
           </b>
         </span>
       </div>
 
-      <div> <b><span data-bind="length"></span> characters</b></div>
+      <div> <b><span data-bind="passLength"></span> characters</b></div>
     </p>
     <p>
-      <button id="genBtn" autofocus>Generate</button>
+      <button id="generateBtn" autofocus>Generate</button>
       <button id="copyBtn" autofocus>Copy</button>
     </p>
   </center>
 
   <footer>Victor N</footer>
-
+  
 </body>
-
 </html>
 
 <script src="words.js"></script>
 
-<script>
-  window.onload = function () {
-
-    randomize.onclick = function randomizeParams() {
-      data.words = randomInt(1, 10);
-      data.digits = randomInt(0, 16);
-      data.separators = randomInt(0, 6);
-      data.randomCase = randomInt(0, 1);
-      genPass();
-    };
-
-    window.requestAnimationFrame(function f() {
-      if (data.continuous) genPass();
-      requestAnimationFrame(f);
-    });
-
-    genBtn.onclick = genPass;
-    genPass();
-
-    copyBtn.onclick = function () {
-      const r = copyToClipboard(output.textContent);
-      if (r) {
-        output.style.color = 'HighlightText';
-        output.style.backgroundColor = 'Highlight';
-        setTimeout(() => output.style.cssText = '', 500);
-      }
-    }
-  };
-
-  function genPass() {
-    const pw = generatePassword();
-
-    data.pass = pw;
-    data.length = pw.length;
-
-    //calc entropy
-    data.blindEntropy = Math.floor(Math.log2(Math.pow(95, pw.length)));
-    let eWords = Math.pow(data.randomCase ? dictWords.length * 2 : dictWords.length, data.words);
-    let eSeparators = Math.pow(data.symbols.split('').length, data.separators);
-    let eDigits = Math.pow(10, data.digits);
-    data.entropy = Math.floor(Math.log2(eWords * eSeparators * eDigits));
-    const unique = new Set(pw.split('')).size;
-    data.minEntropy = Math.floor(Math.log2(Math.pow(unique, pw.length)));
-  };
-
-  const data = dd({
-    words: 4,
-    digits: 4,
-    separators: 2,
-    randomCase: true,
-    symbols: `-/:;()$&@,.?!`,
-  }, genPass);
-
-
-
-  function randomInt_(min, max) {
-    return Math.floor(min + Math.random() * (max + 1 - min));
-  }
-
-  function randomInt(min, max) {
-    const randomBuffer = new Uint32Array(1);
-    window.crypto.getRandomValues(randomBuffer);
-    const randomNumber = randomBuffer[0] / (0xffffffff + 1);
-    min = Math.ceil(min);
-    max = Math.floor(max);
-    return Math.floor(randomNumber * (max - min + 1)) + min;
-  }
-
-
-  function generatePassword() {
-    let pass = '';
-    let parts = [];
-
-    // choose a separator, it may repeat
-    let s = '';
-    for (let i = 0; i < data.separators; i++) {
-      s += data.symbols.split('')[randomInt(0, data.symbols.split('').length - 1)];
-    }
-
-    for (let i = 0; i < data.words; i++) {
-
-      // pick a random word
-      let w = dictWords[randomInt(0, dictWords.length - 1)];
-
-      // capitalize it or not
-      if (data.randomCase) {
-        switch (randomInt(1, 2)) {
-          case 1:
-            w = w.toLowerCase();
-            break;
-          case 2:
-            w = w.toUpperCase();
-            break;
-          case 3:
-            w = w.charAt(0).toUpperCase() + w.slice(1);
-            break;
-        }
-      }
-      parts.push(w);
-    }
-
-    // add numbers to the end
-    let num = '';
-    for (let i = 0; i < data.digits; i++) {
-      num += randomInt(0, 9);
-    }
-    parts.push(num);
-
-    return parts.join(s);
-  }
-
-
-  function copyToClipboard(string) {
-    let textarea;
-    let result;
-
-    try {
-      textarea = document.createElement('textarea');
-      // prevent scroll from jumping to the bottom when focus is set.
-      textarea.style.cssText = 'position:fixed; top:0px; z-index: 999;';
-      textarea.readOnly = true;
-      textarea.value = string;
-      document.body.appendChild(textarea);
-
-      // Try selecting text using setSelectionRange (Works on iOS Mobile Safari)
-      textarea.setSelectionRange(0, string.length);
-
-      const selection = window.getSelection().toString();
-      if (selection !== string) {
-        // test whats selected (setSelectionRange doesn't work on chrome for some reason)
-        // Select using old school method (this also works on iOS, but it makes zoom jump to selection)
-        textarea.focus();
-        textarea.select();
-      }
-
-      result = document.execCommand('copy');
-    } catch (err) {
-      console.error(err);
-      result = null;
-    } finally {
-      // setTimeout(() => { //debugging
-      document.body.removeChild(textarea);
-      // }, 1000 * 10);
-    }
-    return result;
-  }
-
-  function dd(context = {}, watcher = () => {}) {
-    const D = 'data-bind';
-    const values = {};
-    const boundElms = {};
-    const elms = Array.from(document.querySelectorAll(`[${D}]`));
-    elms.forEach(el => {
-      const prop = el.getAttribute(D);
-      if (!boundElms[prop]) boundElms[prop] = [];
-      boundElms[prop].push(el);
-      if ('value' in el) {
-        const changed = () => {
-          values[prop] = getDOMValue(el);
-          updateDOM(prop);
-          watcher(prop, values[prop]);
-        };
-        el.addEventListener('input', changed);
-        el.addEventListener('change', changed);
-      }
-    });
-    Object.keys(boundElms).forEach(prop => {
-      values[prop] = context[prop]; //initial value
-      Object.defineProperty(context, prop, {
-        get() {
-          return values[prop];
-        },
-        set(newValue) {
-          values[prop] = newValue;
-          updateDOM(prop, newValue);
-        },
-        enumerable: true,
-        configurable: true,
-      });
-      updateDOM(prop, values[prop]); //first update
-    });
-
-    function updateDOM(prop) {
-      const value = values[prop];
-      boundElms[prop].forEach(el => {
-        if (el.type === 'checkbox') {
-          el.checked = value;
-        } else if ('value' in el) {
-          el.value = value;
-        } else {
-          el.textContent = value;
-        }
-      });
-    }
-
-    function getDOMValue(el) {
-      let value;
-      if (el.type === 'checkbox') {
-        value = el.checked;
-      } else if ('value' in el) {
-        value = el.value;
-      } else {
-        value = el.textContent;
-      }
-      return value;
-    }
-    return context;
-  }
-</script>
+<!--EOF-->
