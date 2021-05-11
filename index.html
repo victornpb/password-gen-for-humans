@@ -132,7 +132,7 @@
 
         // capitalize it or not
         if (randomCase) {
-          switch (randomIntSecure(1, 2)) {
+          switch (randomIntSecure(1, 3)) {
             case 1:
               w = w.toLowerCase();
               break;
@@ -228,7 +228,7 @@
       data.blindEntropy = Math.floor(Math.log2(Math.pow(95, generatedPassword.length))); // using ascii printable characters
 
       // full knowledge entropy
-      let eWords = Math.pow(data.randomCase ? data.dictWords.length * 2 : data.dictWords.length, data.words);
+      let eWords = Math.pow(data.randomCase ? data.dictWords.length * 3 : data.dictWords.length, data.words);
       let eSeparators = Math.pow(data.symbols.split('').length, data.separators);
       let eDigits = Math.pow(10, data.digits);
       data.entropy = Math.floor(Math.log2(eWords * eSeparators * eDigits));
